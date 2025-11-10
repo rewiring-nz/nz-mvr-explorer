@@ -98,8 +98,8 @@ if query_mode == "Grouped (summary)":
     group_by_col = st.sidebar.selectbox(
         "Group by:",
         available_columns,
+        index=14 if len(available_columns) > 14 else 0,
         help="Groups data to keep results manageable",
-        index=14,
     )
 else:
     group_by_col = None
@@ -114,19 +114,31 @@ num_filters = st.sidebar.number_input(
 
 filters = []
 for i in range(num_filters):
-    col1, col2 = st.sidebar.columns(2)
+    col1, col2, col3 = st.sidebar.columns([2, 1, 2])
     with col1:
         filter_col = st.selectbox(
             f"Column {i+1}:", available_columns, key=f"filter_col_{i}"
         )
     with col2:
-        filter_val = st.text_input(
-            f"Value {i+1}:",
-            key=f"filter_val_{i}",
-            help="Use partial matches (case-insensitive)",
+        filter_op = st.selectbox(
+            "Op:",
+            ["contains", "equals", ">", "<", ">=", "<=", "is null", "not null"],
+            key=f"filter_op_{i}",
+            label_visibility="collapsed",
         )
-    if filter_val:
-        filters.append((filter_col, filter_val))
+    with col3:
+        if filter_op not in ["is null", "not null"]:
+            filter_val = st.text_input(
+                f"Value {i+1}:",
+                key=f"filter_val_{i}",
+                label_visibility="collapsed",
+                placeholder="Value",
+            )
+        else:
+            filter_val = None
+
+    if filter_op in ["is null", "not null"] or filter_val:
+        filters.append((filter_col, filter_op, filter_val))
 
 # Additional options
 st.sidebar.subheader("Display options")
@@ -154,6 +166,21 @@ else:
         ),
         help="Select which columns to show (default: first 5)",
     )
+
+    # Sorting options for raw mode
+    sort_col = st.sidebar.selectbox(
+        "Sort by:",
+        ["(no sorting)"] + available_columns,
+        help="Choose a column to sort results by",
+    )
+
+    if sort_col != "(no sorting)":
+        sort_order = st.sidebar.radio(
+            "Sort order:", ["Ascending", "Descending"], horizontal=True
+        )
+    else:
+        sort_order = None
+
     limit = st.sidebar.slider(
         "Maximum records to show:",
         10,
@@ -166,7 +193,20 @@ else:
 # Build query
 where_clause = ""
 if filters:
-    conditions = [f"CAST(\"{col}\" AS VARCHAR) ILIKE '%{val}%'" for col, val in filters]
+    conditions = []
+    for col, op, val in filters:
+        if op == "contains":
+            conditions.append(f"CAST(\"{col}\" AS VARCHAR) ILIKE '%{val}%'")
+        elif op == "equals":
+            conditions.append(f"CAST(\"{col}\" AS VARCHAR) = '{val}'")
+        elif op in [">", "<", ">=", "<="]:
+            # Try to use as number if possible, otherwise string comparison
+            conditions.append(f"CAST(\"{col}\" AS VARCHAR) {op} '{val}'")
+        elif op == "is null":
+            conditions.append(f'"{col}" IS NULL')
+        elif op == "not null":
+            conditions.append(f'"{col}" IS NOT NULL')
+
     where_clause = "WHERE " + " AND ".join(conditions)
 
 if query_mode == "Grouped (summary)":
@@ -190,10 +230,18 @@ else:
         st.stop()
 
     cols = ", ".join([f'"{col}"' for col in selected_columns])
+
+    # Build ORDER BY clause
+    order_clause = ""
+    if sort_col and sort_col != "(no sorting)":
+        order_direction = "ASC" if sort_order == "Ascending" else "DESC"
+        order_clause = f'ORDER BY "{sort_col}" {order_direction}'
+
     query = f"""
         SELECT {cols}
         FROM {DB_TABLE}
         {where_clause}
+        {order_clause}
         LIMIT {limit}
     """
 
@@ -296,14 +344,46 @@ with st.expander("ℹ️ How to use this tool"):
     4. **Click 'Run Query'** - View results, charts, and download
     
     ### Examples (Grouped mode)
-    - **Group by**: `make`, **No filters** → Count all vehicles by manufacturer
-    - **Group by**: `fuel_type`, **Filter**: `make = TOYOTA` → Toyota vehicles by fuel type
-    - **Group by**: `year_of_manufacture`, **Filter**: `body_style = SEDAN` → Sedans by year
+    - **Group by**: `MAKE`, **No filters** → Count all vehicles by manufacturer
+    - **Group by**: `MOTIVE_POWER`, **Filter**: `MAKE equals TOYOTA` → Toyota vehicles by fuel type
+    - **Group by**: `VEHICLE_YEAR`, **Filter**: `BODY_TYPE equals SEDAN` → Sedans by year
+    - **Group by**: `BASIC_COLOUR`, **Filter**: `MAKE contains FORD` and `VEHICLE_YEAR > 2020` → Modern Ford vehicles by colour
     
     ### Examples (Raw mode)
-    - **Filter**: `make = FORD` and `year_of_manufacture = 2020` → All 2020 Fords
-    - **Filter**: `fuel_type = DIESEL` and `body_style = UTE` → All diesel utes
-    - **No filters**, **Limit**: 1000 → First 1000 vehicles in database
+    - **Filter**: `MAKE equals FORD` and `VEHICLE_YEAR equals 2020`, **Sort by**: `MODEL` → All 2020 Fords alphabetically
+    - **Filter**: `MOTIVE_POWER equals DIESEL` and `BODY_TYPE contains UTE` → All diesel utes
+    - **Filter**: `VEHICLE_YEAR > 2020` → All vehicles newer than 2020
+    - **Filter**: `NUMBER_OF_SEATS >= 7` and `MOTIVE_POWER equals PETROL/ELECTRIC` → Petrol-electric hybrids with 7+ seats
+    - **No filters**, **Limit**: 1000, **Sort by**: `FIRST_NZ_REGISTRATION_YEAR` descending → 1000 most recently registered vehicles
+    
+    ### Available columns
+    Key columns in the dataset:
+    - **MAKE, MODEL, SUBMODEL** - Vehicle identification
+    - **VEHICLE_YEAR** - Year of manufacture
+    - **FIRST_NZ_REGISTRATION_YEAR, FIRST_NZ_REGISTRATION_MONTH** - When registered in NZ
+    - **MOTIVE_POWER** - Fuel type (PETROL, DIESEL, PETROL/ELECTRIC, BATTERY ELECTRIC, etc.)
+    - **BODY_TYPE** - Vehicle body style (SEDAN, HATCH, SUV, UTE, VAN, etc.)
+    - **BASIC_COLOUR** - Vehicle colour
+    - **NUMBER_OF_SEATS** - Seating capacity
+    - **POWER_RATING** - Engine power (kW)
+    - **CC_RATING** - Engine displacement (cc)
+    - **TRANSMISSION_TYPE** - Manual/Automatic
+    - **VEHICLE_USAGE** - Private/Commercial/etc.
+    - **TLA** - Territorial Local Authority (region)
+    - **ORIGINAL_COUNTRY, PREVIOUS_COUNTRY** - Import history
+    - **NZ_ASSEMBLED** - Whether assembled in NZ
+    - **FC_COMBINED, FC_URBAN, FC_EXTRA_URBAN** - Fuel consumption (L/100km)
+    - **SYNTHETIC_GREENHOUSE_GAS** - Emissions rating
+    
+    ### Filter operators
+    - **contains**: Case-insensitive partial match (e.g., "TOY" matches "TOYOTA")
+    - **equals**: Exact match (case-sensitive)
+    - **>, <, >=, <=**: Numeric or alphabetical comparison
+    - **is null / not null**: Check for missing/present values
+    
+    ### Saved queries
+    Build a query, give it a name, and click "Save current query". You can then load it later from the dropdown.
+    Note: Saved queries only persist during your session (they reset when you refresh the page).
     
     ### Performance
     - All queries run in 1-5 seconds on MotherDuck's cloud infrastructure
