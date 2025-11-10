@@ -81,15 +81,29 @@ total_rows = get_row_count()
 if total_rows:
     st.sidebar.success(f"✅ Total vehicles: {total_rows:,}")
 
-st.info("💡 **Tip**: Queries run in seconds on MotherDuck's cloud infrastructure!")
+st.info("💡 Queries should take 1-5 seconds")
 
 # Sidebar for query building
 st.sidebar.header("Query builder")
 
-# Group by selection
-group_by_col = st.sidebar.selectbox(
-    "Group by:", available_columns, help="Groups data to keep results manageable"
+# Query mode selection
+query_mode = st.sidebar.radio(
+    "Query mode:",
+    ["Grouped (summary)", "Raw (individual records)"],
+    help="Grouped: Summarises data. Raw: Shows individual vehicle records.",
 )
+
+# Group by selection (only if in grouped mode)
+if query_mode == "Grouped (summary)":
+    group_by_col = st.sidebar.selectbox(
+        "Group by:",
+        available_columns,
+        help="Groups data to keep results manageable",
+        index=14,
+    )
+else:
+    group_by_col = None
+    st.sidebar.info("💡 Raw mode shows individual vehicle records")
 
 # Multiple filters
 st.sidebar.subheader("Filters (optional)")
@@ -116,12 +130,38 @@ for i in range(num_filters):
 
 # Additional options
 st.sidebar.subheader("Display options")
-count_col = st.sidebar.selectbox(
-    "Count column (or * for all):", ["*"] + available_columns
-)
-limit = st.sidebar.slider(
-    "Maximum results to show:", 10, 1000, 100, help="Limit results"
-)
+
+if query_mode == "Grouped (summary)":
+    count_col = st.sidebar.selectbox(
+        "Count column (or * for all):", ["*"] + available_columns
+    )
+    limit = st.sidebar.slider(
+        "Maximum results to show:", 10, 10000, 100, help="Number of groups to return"
+    )
+else:
+    # Raw mode - select which columns to show
+    selected_columns = st.sidebar.multiselect(
+        "Columns to display:",
+        available_columns,
+        default=(
+            "MAKE",
+            "MODEL",
+            "VEHICLE_YEAR",
+            "MOTIVE_POWER",
+            "VEHICLE_TYPE",
+            "BODY_TYPE",
+            "TLA",
+        ),
+        help="Select which columns to show (default: first 5)",
+    )
+    limit = st.sidebar.slider(
+        "Maximum records to show:",
+        10,
+        5000,
+        100,
+        help="Number of individual records to return",
+    )
+    count_col = None
 
 # Build query
 where_clause = ""
@@ -129,19 +169,33 @@ if filters:
     conditions = [f"CAST(\"{col}\" AS VARCHAR) ILIKE '%{val}%'" for col, val in filters]
     where_clause = "WHERE " + " AND ".join(conditions)
 
-if count_col == "*":
-    count_expr = "COUNT(*)"
-else:
-    count_expr = f'COUNT("{count_col}")'
+if query_mode == "Grouped (summary)":
+    if count_col == "*":
+        count_expr = "COUNT(*)"
+    else:
+        count_expr = f'COUNT("{count_col}")'
 
-query = f"""
-    SELECT "{group_by_col}", {count_expr} as count 
-    FROM {DB_TABLE}
-    {where_clause}
-    GROUP BY "{group_by_col}"
-    ORDER BY count DESC
-    LIMIT {limit}
-"""
+    query = f"""
+        SELECT "{group_by_col}", {count_expr} as count 
+        FROM {DB_TABLE}
+        {where_clause}
+        GROUP BY "{group_by_col}"
+        ORDER BY count DESC
+        LIMIT {limit}
+    """
+else:
+    # Raw mode query
+    if not selected_columns:
+        st.sidebar.error("⚠️ Please select at least one column to display")
+        st.stop()
+
+    cols = ", ".join([f'"{col}"' for col in selected_columns])
+    query = f"""
+        SELECT {cols}
+        FROM {DB_TABLE}
+        {where_clause}
+        LIMIT {limit}
+    """
 
 # Show query
 with st.expander("📝 View SQL Query"):
@@ -164,28 +218,41 @@ if st.sidebar.button("🔍 Run Query", type="primary"):
         else:
             # Display results
             st.success(f"✅ Query completed in {elapsed:.2f} seconds!")
-            st.subheader(f"Results: {len(df):,} groups")
 
-            # Metrics at the top
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric("Total vehicles matched", f"{df['count'].sum():,}")
-            with col2:
-                st.metric("Unique groups", f"{len(df):,}")
-            with col3:
-                st.metric("Average per group", f"{df['count'].mean():.0f}")
+            if query_mode == "Grouped (summary)":
+                st.subheader(f"Results: {len(df):,} groups")
 
-            # Table
-            st.dataframe(df, use_container_width=True, height=400)
+                # Metrics at the top
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Total vehicles matched", f"{df['count'].sum():,}")
+                with col2:
+                    st.metric("Unique groups", f"{len(df):,}")
+                with col3:
+                    st.metric("Average per group", f"{df['count'].mean():.0f}")
 
-            # Chart
-            st.subheader("Visualisation")
-            chart_col = df.columns[0]
-            if len(df) <= 50:
-                st.bar_chart(df.set_index(chart_col)["count"])
+                # Table
+                st.dataframe(df, use_container_width=True, height=400)
+
+                # Chart
+                st.subheader("Visualisation")
+                chart_col = df.columns[0]
+                if len(df) <= 50:
+                    st.bar_chart(df.set_index(chart_col)["count"])
+                else:
+                    st.info(f"📊 Showing top 50 of {len(df)} groups in chart")
+                    st.bar_chart(df.head(50).set_index(chart_col)["count"])
             else:
-                st.info(f"📊 Showing top 50 of {len(df)} groups in chart")
-                st.bar_chart(df.head(50).set_index(chart_col)["count"])
+                # Raw mode display
+                st.subheader(f"Results: {len(df):,} records")
+
+                # Show record count
+                st.metric("Records returned", f"{len(df):,}")
+
+                # Table with all columns
+                st.dataframe(df, use_container_width=True, height=500)
+
+                # No chart for raw data
 
             # Download button
             csv = df.to_csv(index=False)
@@ -211,24 +278,43 @@ if st.sidebar.button("🔍 Run Query", type="primary"):
 with st.expander("ℹ️ How to use this tool"):
     st.markdown(
         """
-    ### Quick start
-    1. **Select 'Group by'** - Choose which column to summarise by
-    2. **Add filters** (optional) - Narrow down to specific vehicles
-    3. **Click 'Run Query'** - View results, charts, and download
+    ### Query modes
     
-    ### Examples
+    **Grouped (summary)**: Aggregates data by a chosen column
+    - Example: Count vehicles by make, fuel type, year, etc.
+    - Best for: Getting totals, distributions, and overviews
+    
+    **Raw (individual records)**: Shows actual vehicle records
+    - Example: List all Toyotas made in 2020
+    - Best for: Finding specific vehicles, exporting filtered data
+    - Limited to 5,000 records to keep things fast
+    
+    ### Quick start
+    1. **Choose query mode** - Grouped for summaries, Raw for individual records
+    2. **Add filters** (optional) - Narrow down to specific vehicles
+    3. **Configure display** - Select what to show
+    4. **Click 'Run Query'** - View results, charts, and download
+    
+    ### Examples (Grouped mode)
     - **Group by**: `make`, **No filters** → Count all vehicles by manufacturer
     - **Group by**: `fuel_type`, **Filter**: `make = TOYOTA` → Toyota vehicles by fuel type
     - **Group by**: `year_of_manufacture`, **Filter**: `body_style = SEDAN` → Sedans by year
     
+    ### Examples (Raw mode)
+    - **Filter**: `make = FORD` and `year_of_manufacture = 2020` → All 2020 Fords
+    - **Filter**: `fuel_type = DIESEL` and `body_style = UTE` → All diesel utes
+    - **No filters**, **Limit**: 1000 → First 1000 vehicles in database
+    
     ### Performance
     - All queries run in 1-5 seconds on MotherDuck's cloud infrastructure
-    - No downloads needed, data is hosted in the cloud
+    - You can safely request up to 10,000 grouped results or 5,000 raw records
+    - Data never leaves MotherDuck until query results are returned
     
     ### Tips for best results
-    - ✅ Use 'Group by' to summarise data
-    - ✅ Add filters to focus on what you need
-    - ✅ Start with lower 'Maximum results' and increase if needed
+    - ✅ Use filters to focus on what you need
+    - ✅ In Raw mode, select only the columns you care about
+    - ✅ Start with lower limits and increase if needed
+    - ✅ Use Grouped mode for analysis, Raw mode for finding specific vehicles
     """
     )
 
