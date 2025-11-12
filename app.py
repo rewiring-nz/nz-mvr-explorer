@@ -105,7 +105,7 @@ with st.spinner("📋 Loading table schema..."):
 
 if not available_columns:
     st.error("❌ Could not read table from MotherDuck.")
-    st.info("Have you uploaded your data? Run the setup script first.")
+    st.info(f"Have you uploaded your data and named it {DB_TABLE}?")
     st.stop()
 
 # Get row count
@@ -127,10 +127,15 @@ query_mode = st.sidebar.radio(
 
 # Group by selection (only if in grouped mode)
 if query_mode == "Grouped (summary)":
+    default_idx = (
+        available_columns.index("MOTIVE_POWER")
+        if "MOTIVE_POWER" in available_columns
+        else 0
+    )
     group_by_col = st.sidebar.selectbox(
         "Group by:",
         available_columns,
-        index=14 if len(available_columns) > 14 else 0,
+        index=default_idx,
         help="Groups data to keep results manageable",
     )
 else:
@@ -141,7 +146,7 @@ else:
 st.sidebar.subheader("Filters (optional)")
 st.sidebar.caption("Filter data before grouping for faster results")
 num_filters = st.sidebar.number_input(
-    "Number of filters:", min_value=0, max_value=5, value=0
+    "Number of filters:", min_value=0, max_value=10, value=0
 )
 
 filters = []
