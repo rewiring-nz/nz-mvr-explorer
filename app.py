@@ -280,7 +280,7 @@ if st.sidebar.button("🔍 Run Query", type="primary"):
                     st.metric("Average per group", f"{df['count'].mean():.0f}")
 
                 # Table
-                st.dataframe(df, use_container_width=True, height=400)
+                st.dataframe(df, width="stretch", height=400)
 
                 # Chart
                 st.subheader("Visualisation")
@@ -298,7 +298,7 @@ if st.sidebar.button("🔍 Run Query", type="primary"):
                 st.metric("Records returned", f"{len(df):,}")
 
                 # Table with all columns
-                st.dataframe(df, use_container_width=True, height=500)
+                st.dataframe(df, width="stretch", height=500)
 
                 # No chart for raw data
 
