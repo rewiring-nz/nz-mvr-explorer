@@ -63,6 +63,10 @@ def get_row_count():
         return None
 
 
+st.write(
+    "📋 Available columns in dataset: [MVR Data Dictionary](https://docs.google.com/spreadsheets/d/153bzOAGHSAmMhO3kRpc8Phu2sF21YPtu0c2WJ9Hl6Q0/edit?gid=315789064#gid=315789064)"
+)
+
 # Load dataset info
 with st.spinner("📋 Loading table schema..."):
     available_columns = get_columns()
@@ -71,10 +75,6 @@ if not available_columns:
     st.error("❌ Could not read table from MotherDuck.")
     st.info("Have you uploaded your data? Run the setup script first.")
     st.stop()
-
-# Show column list
-with st.expander("📋 Available columns in dataset"):
-    st.write(available_columns)
 
 # Get row count
 total_rows = get_row_count()
