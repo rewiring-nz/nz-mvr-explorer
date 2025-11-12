@@ -45,13 +45,20 @@ def get_motherduck_token() -> str:
 
 MOTHERDUCK_TOKEN = get_motherduck_token()
 
+
 @st.cache_resource
 def get_motherduck_connection():
+    """Create and cache MotherDuck connection"""
     try:
         con = duckdb.connect(f"md:?motherduck_token={MOTHERDUCK_TOKEN}")
+        # Set query timeout
+        con.execute(f"SET statement_timeout = '{QUERY_TIMEOUT}s'")
         return con
-    except Exception as e:
+    except duckdb.Error as e:
         st.error(f"Failed to connect to MotherDuck: {str(e)}")
+        return None
+    except Exception as e:
+        st.error(f"Unexpected error connecting to MotherDuck: {str(e)}")
         return None
 
 
@@ -62,31 +69,29 @@ if con is None:
 
 st.success("✅ Connected to MotherDuck cloud database")
 
-# Database and table name
-# TODO: in future, let the user select which one if there are multiple versions uploaded
-DB_TABLE = "mvr.main.mvr_sep2025"
-
 
 # Get column names
-@st.cache_data(ttl=3600)
-def get_columns():
+@st.cache_data(ttl=CACHE_TTL)
+def get_columns() -> List[str]:
+    """Fetch and cache column names from table"""
     try:
         result = con.execute(f"DESCRIBE {DB_TABLE}").fetchall()
         return [row[0] for row in result]
+    except duckdb.Error as e:
+        st.error(f"DuckDB error: {str(e)}")
+        return []
     except Exception as e:
-        st.error(f"Error reading table: {str(e)}")
-        st.info(
-            "Make sure you've uploaded the data to MotherDuck using the setup script."
-        )
+        st.error(f"Unexpected error reading table: {str(e)}")
         return []
 
 
-@st.cache_data(ttl=3600)
-def get_row_count():
+@st.cache_data(ttl=CACHE_TTL)
+def get_row_count() -> Optional[int]:
     try:
         result = con.execute(f"SELECT COUNT(*) FROM {DB_TABLE}").fetchone()
         return result[0]
-    except:
+    except Exception as e:
+        st.warning(f"Could not retrieve row count: {str(e)}")
         return None
 
 
