@@ -27,18 +27,24 @@ st.set_page_config(page_title="NZ Vehicle Register Query", layout="wide")
 
 st.title("🚗 NZ Motor Vehicle Register Query Tool")
 
-# Get MotherDuck token from Streamlit secrets
-try:
-    MOTHERDUCK_TOKEN = st.secrets["motherduck"]["token"]
-except:
-    st.error("❌ MotherDuck token not configured. Please add it to Streamlit secrets.")
-    st.info(
-        "Go to your app settings → Secrets, and add: [motherduck]\ntoken = 'your_token_here'"
-    )
-    st.stop()
+
+def get_motherduck_token() -> str:
+    """Retrieve MotherDuck token from Streamlit secrets"""
+    try:
+        return st.secrets["motherduck"]["token"]
+    except KeyError as e:
+        st.error(f"❌ MotherDuck token not configured. Missing key: {str(e)}")
+        st.info(
+            "Go to your app settings → Secrets, and add:\n\n[motherduck]\ntoken = 'your_token_here'"
+        )
+        st.stop()
+    except Exception as e:
+        st.error(f"❌ Error accessing secrets: {str(e)}")
+        st.stop()
 
 
-# Initialize MotherDuck connection
+MOTHERDUCK_TOKEN = get_motherduck_token()
+
 @st.cache_resource
 def get_motherduck_connection():
     try:
