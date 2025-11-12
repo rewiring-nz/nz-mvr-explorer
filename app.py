@@ -1,6 +1,27 @@
 import streamlit as st
 import duckdb
 import pandas as pd
+from typing import List, Tuple, Optional
+import time
+
+# Constants
+MAX_GROUPED_RESULTS = 10000
+MAX_RAW_RESULTS = 5000
+CACHE_TTL = 3600
+QUERY_TIMEOUT = 30
+# TODO: in future, let the user select which one if there are multiple versions uploaded
+DB_TABLE = "mvr.main.mvr_sep2025"
+
+# Default columns for raw mode (will be validated)
+DEFAULT_RAW_COLUMNS = [
+    "MAKE",
+    "MODEL",
+    "VEHICLE_YEAR",
+    "MOTIVE_POWER",
+    "VEHICLE_TYPE",
+    "BODY_TYPE",
+    "TLA",
+]
 
 st.set_page_config(page_title="NZ Vehicle Register Query", layout="wide")
 
