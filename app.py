@@ -159,7 +159,7 @@ for i in range(num_filters):
     with col2:
         filter_op = st.selectbox(
             "Op:",
-            ["contains", "equals", ">", "<", ">=", "<=", "is null", "not null"],
+            ["equals", "contains", ">", "<", ">=", "<=", "is null", "not null"],
             key=f"filter_op_{i}",
             label_visibility="collapsed",
         )
@@ -182,7 +182,9 @@ st.sidebar.subheader("Display options")
 
 if query_mode == "Grouped (summary)":
     count_col = st.sidebar.selectbox(
-        "Count column (or * for all):", ["*"] + available_columns
+        "Count column (or * for all):",
+        ["*"] + available_columns,
+        help="'*' counts all rows including nulls in the group",
     )
     limit = st.sidebar.slider(
         "Maximum results to show:", 10, 10000, 100, help="Number of groups to return"
@@ -341,38 +343,55 @@ if st.sidebar.button("🔍 Run Query", type="primary"):
 
             # Download button
             csv = df.to_csv(index=False)
+            filename = (
+                "grouped_query_results.csv"
+                if query_mode == "Grouped (summary)"
+                else "raw_query_results.csv"
+            )
             st.download_button(
                 label="📥 Download results as CSV",
                 data=csv,
-                file_name="query_results.csv",
+                file_name=filename,
                 mime="text/csv",
             )
 
-    except Exception as e:
-        st.error(f"❌ Error running query: {str(e)}")
+    except RuntimeError as e:
+        st.error(f"❌ {str(e)}")
         st.info("💡 Troubleshooting tips:")
         st.markdown(
             """
-        - Verify column names match your dataset (check 'Available columns' above)
         - Try a simpler query first (fewer filters, lower limit)
-        - Check if the column name has special characters or spaces
+        - Ensure filter values don't contain special characters that could cause issues
+        - Check that numeric comparisons use valid numbers (e.g. no negatives)
         """
         )
+    except Exception as e:
+        st.error(f"❌ Unexpected error: {str(e)}")
+        st.info("Please try again or contact support if the issue persists.")
+
 
 # Info section
 with st.expander("ℹ️ How to use this tool"):
     st.markdown(
         """
+    ### Tips for best results
+    - ✅ Use filters to focus on what you need
+    - ✅ In Raw mode, select only the columns you care about
+    - ✅ Start with lower limits and increase if needed
+    - ✅ Use Grouped mode for analysis, Raw mode for finding specific vehicles
+    
     ### Query modes
     
-    **Grouped (summary)**: Aggregates data by a chosen column
-    - Example: Count vehicles by make, fuel type, year, etc.
+    **Grouped (summary)**: Counts data by a chosen column
+    - Example: Count vehicles by make, fuel type (`MOTIVE_POWER`), year, etc.
     - Best for: Getting totals, distributions, and overviews
+    - Note: Null values are included and shown as '(null)'. This matches pandas' `value_counts(dropna=False)` behaviour.
+
     
     **Raw (individual records)**: Shows actual vehicle records
-    - Example: List all Toyotas made in 2020
-    - Best for: Finding specific vehicles, exporting filtered data
-    - Limited to 5,000 records to keep things fast
+    - Example: List the top 100 Ford Rangers submodel names with the highest CC values
+    - Best for: Finding specific vehicles, previewing what the underlying data looks like
+    - Limited to 5,000 records to keep things performant.
     
     ### Quick start
     1. **Choose query mode** - Grouped for summaries, Raw for individual records
@@ -382,35 +401,19 @@ with st.expander("ℹ️ How to use this tool"):
     
     ### Examples (Grouped mode)
     - **Group by**: `MAKE`, **No filters** → Count all vehicles by manufacturer
-    - **Group by**: `MOTIVE_POWER`, **Filter**: `MAKE equals TOYOTA` → Toyota vehicles by fuel type
-    - **Group by**: `VEHICLE_YEAR`, **Filter**: `BODY_TYPE equals SEDAN` → Sedans by year
-    - **Group by**: `BASIC_COLOUR`, **Filter**: `MAKE contains FORD` and `VEHICLE_YEAR > 2020` → Modern Ford vehicles by colour
+    - **Group by**: `MOTIVE_POWER`, **Filter**: `BODY_TYPE equals UTILITY` → Utes by fuel type
+    - **Group by**: `SUBMODEL` and `VEHICLE_YEAR`, **Filter**: `MAKE equals FORD` and `MODEL equals RANGER → Ford Rangers by submodel and year
+    - **Group by**: `VEHICLE_TYPE` and `BODY_TYPE` and `MOTIVE_POWER`, **Filter**: `VEHICLE_YEAR > 2020` → Modern vehicles by type
     
     ### Examples (Raw mode)
     - **Filter**: `MAKE equals FORD` and `VEHICLE_YEAR equals 2020`, **Sort by**: `MODEL` → All 2020 Fords alphabetically
     - **Filter**: `MOTIVE_POWER equals DIESEL` and `BODY_TYPE contains UTE` → All diesel utes
     - **Filter**: `VEHICLE_YEAR > 2020` → All vehicles newer than 2020
-    - **Filter**: `NUMBER_OF_SEATS >= 7` and `MOTIVE_POWER equals PETROL/ELECTRIC` → Petrol-electric hybrids with 7+ seats
+    - **Filter**: `NUMBER_OF_SEATS >= 7` and `MOTIVE_POWER equals ELECTRIC` → BEVs with 7+ seats
     - **No filters**, **Limit**: 1000, **Sort by**: `FIRST_NZ_REGISTRATION_YEAR` descending → 1000 most recently registered vehicles
     
     ### Available columns
-    Key columns in the dataset:
-    - **MAKE, MODEL, SUBMODEL** - Vehicle identification
-    - **VEHICLE_YEAR** - Year of manufacture
-    - **FIRST_NZ_REGISTRATION_YEAR, FIRST_NZ_REGISTRATION_MONTH** - When registered in NZ
-    - **MOTIVE_POWER** - Fuel type (PETROL, DIESEL, PETROL/ELECTRIC, BATTERY ELECTRIC, etc.)
-    - **BODY_TYPE** - Vehicle body style (SEDAN, HATCH, SUV, UTE, VAN, etc.)
-    - **BASIC_COLOUR** - Vehicle colour
-    - **NUMBER_OF_SEATS** - Seating capacity
-    - **POWER_RATING** - Engine power (kW)
-    - **CC_RATING** - Engine displacement (cc)
-    - **TRANSMISSION_TYPE** - Manual/Automatic
-    - **VEHICLE_USAGE** - Private/Commercial/etc.
-    - **TLA** - Territorial Local Authority (region)
-    - **ORIGINAL_COUNTRY, PREVIOUS_COUNTRY** - Import history
-    - **NZ_ASSEMBLED** - Whether assembled in NZ
-    - **FC_COMBINED, FC_URBAN, FC_EXTRA_URBAN** - Fuel consumption (L/100km)
-    - **SYNTHETIC_GREENHOUSE_GAS** - Emissions rating
+    See the [MVR Data Dictionary](https://docs.google.com/spreadsheets/d/10OqmyPzWYq6Eai9qsuEMZAAgL3cWrLorIpjSGbW3d2g/edit?gid=649340362#gid=649340362) for columns and their values.
     
     ### Filter operators
     - **contains**: Case-insensitive partial match (e.g., "TOY" matches "TOYOTA")
