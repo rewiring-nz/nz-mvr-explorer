@@ -1,5 +1,5 @@
 from typing import List, Tuple, Optional
-from app import DB_TABLE
+from src.constants import DB_TABLE
 from src.filter import build_filter_condition
 from src.validation import validate_columns
 

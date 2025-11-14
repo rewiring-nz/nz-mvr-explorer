@@ -1,17 +1,10 @@
+from src.constants import CACHE_TTL, DB_TABLE
 from src.query import build_query
 import streamlit as st
 import duckdb
 import pandas as pd
-from typing import List, Tuple, Optional
+from typing import List, Optional
 import time
-
-# Constants
-MAX_GROUPED_RESULTS = 10000
-MAX_RAW_RESULTS = 5000
-CACHE_TTL = 3600
-QUERY_TIMEOUT = 30
-# TODO: in future, let the user select which one if there are multiple versions uploaded
-DB_TABLE = "mvr.main.mvr_sep2025"
 
 # Default columns for raw mode (will be validated)
 DEFAULT_RAW_COLUMNS = [
@@ -52,8 +45,6 @@ def get_motherduck_connection():
     """Create and cache MotherDuck connection"""
     try:
         con = duckdb.connect(f"md:?motherduck_token={MOTHERDUCK_TOKEN}")
-        # Set query timeout
-        con.execute(f"SET statement_timeout = '{QUERY_TIMEOUT}s'")
         return con
     except duckdb.Error as e:
         st.error(f"Failed to connect to MotherDuck: {str(e)}")
