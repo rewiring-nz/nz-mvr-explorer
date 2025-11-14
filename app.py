@@ -1,3 +1,4 @@
+from src.query import build_query
 import streamlit as st
 import duckdb
 import pandas as pd
@@ -204,19 +205,16 @@ if query_mode == "Grouped (summary)":
     )
 else:
     # Raw mode - select which columns to show
+    # Validate default columns exist
+    default_cols = [c for c in DEFAULT_RAW_COLUMNS if c in available_columns]
+    if not default_cols:
+        default_cols = available_columns[:7]  # First 7 columns as fallback
+
     selected_columns = st.sidebar.multiselect(
         "Columns to display:",
         available_columns,
-        default=(
-            "MAKE",
-            "MODEL",
-            "VEHICLE_YEAR",
-            "MOTIVE_POWER",
-            "VEHICLE_TYPE",
-            "BODY_TYPE",
-            "TLA",
-        ),
-        help="Select which columns to show (default: first 5)",
+        default=default_cols,
+        help="Select which columns to show",
     )
 
     # Sorting options for raw mode
@@ -242,64 +240,94 @@ else:
     )
     count_col = None
 
-# Build query
-where_clause = ""
-if filters:
-    conditions = []
-    for col, op, val in filters:
-        if op == "contains":
-            conditions.append(f"CAST(\"{col}\" AS VARCHAR) ILIKE '%{val}%'")
-        elif op == "equals":
-            conditions.append(f"CAST(\"{col}\" AS VARCHAR) = '{val}'")
-        elif op in [">", "<", ">=", "<="]:
-            # Try to use as number if possible, otherwise string comparison
-            conditions.append(f"CAST(\"{col}\" AS VARCHAR) {op} '{val}'")
-        elif op == "is null":
-            conditions.append(f'"{col}" IS NULL')
-        elif op == "not null":
-            conditions.append(f'"{col}" IS NOT NULL')
 
-    where_clause = "WHERE " + " AND ".join(conditions)
+# Build and display query
+try:
+    query, params = build_query(
+        query_mode=query_mode,
+        group_by_col=group_by_col,
+        count_col=count_col,
+        selected_columns=(
+            selected_columns if query_mode == "Raw (individual records)" else []
+        ),
+        sort_col=sort_col if query_mode == "Raw (individual records)" else None,
+        sort_order=sort_order if query_mode == "Raw (individual records)" else None,
+        filters=filters,
+        limit=limit,
+        available_columns=available_columns,
+    )
 
-if query_mode == "Grouped (summary)":
-    if count_col == "*":
-        count_expr = "COUNT(*)"
-    else:
-        count_expr = f'COUNT("{count_col}")'
+    # Show query (with parameters displayed separately)
+    with st.expander("📝 View SQL query"):
+        st.code(query, language="sql")
+        if params:
+            st.caption("Parameters:")
+            for i, param in enumerate(params, 1):
+                st.code(f"${i}: {repr(param)}")
 
-    query = f"""
-        SELECT "{group_by_col}", {count_expr} as count 
-        FROM {DB_TABLE}
-        {where_clause}
-        GROUP BY "{group_by_col}"
-        ORDER BY count DESC
-        LIMIT {limit}
-    """
-else:
-    # Raw mode query
-    if not selected_columns:
-        st.sidebar.error("⚠️ Please select at least one column to display")
-        st.stop()
+except ValueError as e:
+    st.error(f"❌ Query building error: {str(e)}")
+    st.stop()
 
-    cols = ", ".join([f'"{col}"' for col in selected_columns])
 
-    # Build ORDER BY clause
-    order_clause = ""
-    if sort_col and sort_col != "(no sorting)":
-        order_direction = "ASC" if sort_order == "Ascending" else "DESC"
-        order_clause = f'ORDER BY "{sort_col}" {order_direction}'
+# # Build query
+# where_clause = ""
+# if filters:
+#     conditions = []
+#     for col, op, val in filters:
+#         if op == "contains":
+#             conditions.append(f"CAST(\"{col}\" AS VARCHAR) ILIKE '%{val}%'")
+#         elif op == "equals":
+#             conditions.append(f"CAST(\"{col}\" AS VARCHAR) = '{val}'")
+#         elif op in [">", "<", ">=", "<="]:
+#             # Try to use as number if possible, otherwise string comparison
+#             conditions.append(f"CAST(\"{col}\" AS VARCHAR) {op} '{val}'")
+#         elif op == "is null":
+#             conditions.append(f'"{col}" IS NULL')
+#         elif op == "not null":
+#             conditions.append(f'"{col}" IS NOT NULL')
 
-    query = f"""
-        SELECT {cols}
-        FROM {DB_TABLE}
-        {where_clause}
-        {order_clause}
-        LIMIT {limit}
-    """
+#     where_clause = "WHERE " + " AND ".join(conditions)
 
-# Show query
-with st.expander("📝 View SQL Query"):
-    st.code(query, language="sql")
+# if query_mode == "Grouped (summary)":
+#     if count_col == "*":
+#         count_expr = "COUNT(*)"
+#     else:
+#         count_expr = f'COUNT("{count_col}")'
+
+#     query = f"""
+#         SELECT "{group_by_col}", {count_expr} as count
+#         FROM {DB_TABLE}
+#         {where_clause}
+#         GROUP BY "{group_by_col}"
+#         ORDER BY count DESC
+#         LIMIT {limit}
+#     """
+# else:
+#     # Raw mode query
+#     if not selected_columns:
+#         st.sidebar.error("⚠️ Please select at least one column to display")
+#         st.stop()
+
+#     cols = ", ".join([f'"{col}"' for col in selected_columns])
+
+#     # Build ORDER BY clause
+#     order_clause = ""
+#     if sort_col and sort_col != "(no sorting)":
+#         order_direction = "ASC" if sort_order == "Ascending" else "DESC"
+#         order_clause = f'ORDER BY "{sort_col}" {order_direction}'
+
+#     query = f"""
+#         SELECT {cols}
+#         FROM {DB_TABLE}
+#         {where_clause}
+#         {order_clause}
+#         LIMIT {limit}
+#     """
+
+# # Show query
+# with st.expander("📝 View SQL Query"):
+#     st.code(query, language="sql")
 
 # Run query button
 if st.sidebar.button("🔍 Run Query", type="primary"):
@@ -434,21 +462,12 @@ with st.expander("ℹ️ How to use this tool"):
     - **equals**: Exact match (case-sensitive)
     - **>, <, >=, <=**: Numeric or alphabetical comparison
     - **is null / not null**: Check for missing/present values
-    
-    ### Saved queries
-    Build a query, give it a name, and click "Save current query". You can then load it later from the dropdown.
-    Note: Saved queries only persist during your session (they reset when you refresh the page).
-    
+
     ### Performance
     - All queries run in 1-5 seconds on MotherDuck's cloud infrastructure
+    - Queries have a 30-second timeout for safety
     - You can safely request up to 10,000 grouped results or 5,000 raw records
     - Data never leaves MotherDuck until query results are returned
-    
-    ### Tips for best results
-    - ✅ Use filters to focus on what you need
-    - ✅ In Raw mode, select only the columns you care about
-    - ✅ Start with lower limits and increase if needed
-    - ✅ Use Grouped mode for analysis, Raw mode for finding specific vehicles
     """
     )
 
@@ -456,3 +475,4 @@ with st.expander("ℹ️ How to use this tool"):
 st.sidebar.markdown("---")
 st.sidebar.caption("☁️ Powered by MotherDuck")
 st.sidebar.caption("Built with DuckDB + Streamlit")
+st.sidebar.caption("[View on GitHub](https://github.com/rewiring-nz/nz-mvr-explorer)")
