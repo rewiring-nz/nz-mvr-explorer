@@ -148,7 +148,7 @@ if query_mode == "Grouped (summary)":
     if not group_by_cols:
         st.sidebar.warning("⚠️ Please select at least one column to group by")
 else:
-    group_by_col = None
+    group_by_cols = None
     st.sidebar.info("💡 Raw mode shows individual vehicle records")
 
 # Multiple filters
