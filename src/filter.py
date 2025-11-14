@@ -21,6 +21,23 @@ def build_filter_condition(
     elif op == "equals":
         params.append(val)
         return f'CAST("{col}" AS VARCHAR) = ${len(params)}'
+    elif op == "is one of":
+        # Split by newlines or commas, strip whitespace
+        values = []
+        for line in val.split("\n"):
+            values.extend([v.strip() for v in line.split(",") if v.strip()])
+
+        if not values:
+            return None
+
+        # Add each value as a parameter
+        placeholders = []
+        for v in values:
+            params.append(v)
+            placeholders.append(f"${len(params)}")
+
+        placeholders_str = ", ".join(placeholders)
+        return f'CAST("{col}" AS VARCHAR) IN ({placeholders_str})'
     elif op in [">", "<", ">=", "<="]:
         # Try numeric comparison first, fall back to string comparison
         if is_numeric(val):

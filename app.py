@@ -162,30 +162,49 @@ num_filters = st.sidebar.number_input(
 # Tuple[col, operation, value]
 filters: List[Tuple[str, str, Optional[str]]] = []
 for i in range(num_filters):
-    st.sidebar.caption(f"Filter {i+1}:")
     col1, col2, col3 = st.sidebar.columns([2, 1, 2])
     with col1:
         filter_col = st.selectbox(
             f"Column {i+1}:",
             available_columns,
             key=f"filter_col_{i}",
-            label_visibility="collapsed",
+            # label_visibility="collapsed",
         )
     with col2:
         filter_op = st.selectbox(
-            "Op:",
-            ["equals", "contains", ">", "<", ">=", "<=", "is null", "not null"],
+            f"Op {i+1}:",
+            [
+                "equals",
+                "contains",
+                "is one of",
+                ">",
+                "<",
+                ">=",
+                "<=",
+                "is null",
+                "not null",
+            ],
             key=f"filter_op_{i}",
-            label_visibility="collapsed",
+            # label_visibility="collapsed",
         )
     with col3:
         if filter_op not in ["is null", "not null"]:
-            filter_val = st.text_input(
-                f"Value {i+1}:",
-                key=f"filter_val_{i}",
-                label_visibility="collapsed",
-                placeholder="Value",
-            )
+            if filter_op == "is one of":
+                filter_val = st.text_area(
+                    f"Values {i+1}:",
+                    key=f"filter_val_{i}",
+                    # label_visibility="collapsed",
+                    placeholder="FORD\nTOYOTA\nHONDA",
+                    help="Enter one value per line or separate with commas",
+                    height=5,
+                )
+            else:
+                filter_val = st.text_input(
+                    f"Value {i+1}:",
+                    key=f"filter_val_{i}",
+                    # label_visibility="collapsed",
+                    placeholder="Value",
+                )
         else:
             filter_val = None
 
@@ -320,12 +339,12 @@ if st.sidebar.button("🔍 Run Query", type="primary"):
                     chart_df = df_chart.set_index("_combined_label")["count"]
 
                 if len(df) <= 50:
-                    st.bar_chart(chart_df)
+                    st.bar_chart(chart_df, sort="-count")
                 else:
                     st.info(
                         f"📊 Showing top 50 of {len(df)} groups in chart (sorted by count, descending)"
                     )
-                    st.bar_chart(chart_df.head(50))
+                    st.bar_chart(chart_df.head(50), sort="-count")
             else:
                 # Raw mode display
                 st.subheader(f"Results")
