@@ -99,6 +99,19 @@ st.write(
     "📋 Available columns in dataset: [MVR Data Dictionary](https://docs.google.com/spreadsheets/d/153bzOAGHSAmMhO3kRpc8Phu2sF21YPtu0c2WJ9Hl6Q0/edit?gid=315789064#gid=315789064)"
 )
 
+
+@st.cache_data(ttl=300, show_spinner=False)
+def run_query(query: str, params: List) -> pd.DataFrame:
+    """Execute query with caching."""
+    try:
+        # Convert params list to tuple for caching
+        return con.execute(query, tuple(params)).fetchdf()
+    except duckdb.Error as e:
+        raise RuntimeError(f"Database error: {str(e)}")
+    except Exception as e:
+        raise RuntimeError(f"Query execution failed: {str(e)}")
+
+
 # Load dataset info
 with st.spinner("📋 Loading table schema..."):
     available_columns = get_columns()
@@ -290,14 +303,15 @@ with st.expander("📝 View SQL Query"):
 
 # Run query button
 if st.sidebar.button("🔍 Run Query", type="primary"):
+    # Validate inputs before running
+    if query_mode == "Raw (individual records)" and not selected_columns:
+        st.error("⚠️ Please select at least one column to display")
+        st.stop()
+
     try:
         with st.spinner("Running query on MotherDuck..."):
-            import time
-
             start = time.time()
-
-            df = con.execute(query).fetchdf()
-
+            df = run_query(query, params)
             elapsed = time.time() - start
 
         if df.empty:
