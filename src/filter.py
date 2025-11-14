@@ -20,7 +20,6 @@ def build_filter_condition(
         return f'CAST("{col}" AS VARCHAR) ILIKE ${len(params)}'
     elif op == "equals":
         params.append(val)
-        # TODO: Test this thoroughly with different types
         return f'CAST("{col}" AS VARCHAR) = ${len(params)}'
     elif op in [">", "<", ">=", "<="]:
         # Try numeric comparison first, fall back to string comparison

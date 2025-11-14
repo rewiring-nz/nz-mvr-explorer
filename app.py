@@ -149,17 +149,22 @@ else:
 
 # Multiple filters
 st.sidebar.subheader("Filters (optional)")
-st.sidebar.caption("Filter data before grouping for faster results")
+if query_mode == "Grouped (summary)":
+    st.sidebar.caption("Filter data before grouping for faster results")
 num_filters = st.sidebar.number_input(
     "Number of filters:", min_value=0, max_value=10, value=0
 )
 
 filters = []
 for i in range(num_filters):
+    st.sidebar.caption(f"Filter {i+1}:")
     col1, col2, col3 = st.sidebar.columns([2, 1, 2])
     with col1:
         filter_col = st.selectbox(
-            f"Column {i+1}:", available_columns, key=f"filter_col_{i}"
+            f"Column {i+1}:",
+            available_columns,
+            key=f"filter_col_{i}",
+            label_visibility="collapsed",
         )
     with col2:
         filter_op = st.selectbox(
@@ -364,7 +369,7 @@ if st.sidebar.button("🔍 Run Query", type="primary"):
                     st.bar_chart(df.head(50).set_index(chart_col)["count"])
             else:
                 # Raw mode display
-                st.subheader(f"Results: {len(df):,} records")
+                st.subheader(f"Results")
 
                 # Show record count
                 st.metric("Records returned", f"{len(df):,}")
