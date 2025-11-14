@@ -6,7 +6,7 @@ from src.validation import validate_columns
 
 def build_query(
     query_mode: str,
-    group_by_col: Optional[str],
+    group_by_cols: Optional[List[str]],
     count_col: Optional[str],
     selected_columns: List[str],
     sort_col: Optional[str],
@@ -23,15 +23,13 @@ def build_query(
 
     # Validate all column names
     columns_to_validate = []
-    if group_by_col:
-        columns_to_validate.append(group_by_col)
+    if group_by_cols:
+        columns_to_validate.extend(group_by_cols)
     if count_col and count_col != "*":
         columns_to_validate.append(count_col)
     columns_to_validate.extend(selected_columns)
     if sort_col and sort_col != "(no sorting)":
         columns_to_validate.append(sort_col)
-
-    # Add filter columns
     for col, _, _ in filters:
         columns_to_validate.append(col)
 
@@ -52,22 +50,21 @@ def build_query(
 
     # Build query based on mode
     if query_mode == "Grouped (summary)":
-        # Use COALESCE to convert NULL to a readable string for grouping
-        # But count all rows including nulls
-        if count_col == "*":
-            count_expr = "COUNT(*)"
-        else:
-            # Count all rows in the group, not just non-null values
-            count_expr = "COUNT(*)"
+
+        group_by_clause = ", ".join([f'"{col}"' for col in group_by_cols])
+        select_clause = ", ".join([f'"{col}"' for col in group_by_cols])
 
         query = f"""
-            SELECT 
-                COALESCE(CAST("{group_by_col}" AS VARCHAR), '(null)') as "{group_by_col}",
-                {count_expr} as count 
-            FROM {DB_TABLE}
-            {where_clause}
-            GROUP BY "{group_by_col}"
-            ORDER BY count DESC
+            WITH counts AS (
+                SELECT 
+                    {select_clause},
+                    COUNT(*) as count 
+                FROM {DB_TABLE}
+                {where_clause}
+                GROUP BY {group_by_clause}
+            )
+            SELECT * FROM counts
+            ORDER BY count DESC, {group_by_clause}
             LIMIT {limit}
         """
     else:

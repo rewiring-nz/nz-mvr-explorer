@@ -3,7 +3,7 @@ from src.query import build_query
 import streamlit as st
 import duckdb
 import pandas as pd
-from typing import List, Optional
+from typing import List, Optional, Tuple
 import time
 
 # Default columns for raw mode (will be validated)
@@ -137,12 +137,16 @@ if query_mode == "Grouped (summary)":
         if "MOTIVE_POWER" in available_columns
         else 0
     )
-    group_by_col = st.sidebar.selectbox(
-        "Group by:",
+    group_by_cols = st.sidebar.multiselect(
+        "Group by (select 1-5 columns):",
         available_columns,
-        index=default_idx,
-        help="Groups data to keep results manageable",
+        default=[available_columns[default_idx]] if available_columns else [],
+        max_selections=5,
+        help="Groups data to keep results manageable. Null values will be shown as '(null)'.",
     )
+    # Validate at least one column selected
+    if not group_by_cols:
+        st.sidebar.warning("⚠️ Please select at least one column to group by")
 else:
     group_by_col = None
     st.sidebar.info("💡 Raw mode shows individual vehicle records")
@@ -155,7 +159,8 @@ num_filters = st.sidebar.number_input(
     "Number of filters:", min_value=0, max_value=10, value=0
 )
 
-filters = []
+# Tuple[col, operation, value]
+filters: List[Tuple[str, str, Optional[str]]] = []
 for i in range(num_filters):
     st.sidebar.caption(f"Filter {i+1}:")
     col1, col2, col3 = st.sidebar.columns([2, 1, 2])
@@ -241,7 +246,7 @@ else:
 try:
     query, params = build_query(
         query_mode=query_mode,
-        group_by_col=group_by_col,
+        group_by_cols=group_by_cols,
         count_col=count_col,
         selected_columns=(
             selected_columns if query_mode == "Raw (individual records)" else []
@@ -265,65 +270,6 @@ except ValueError as e:
     st.error(f"❌ Query building error: {str(e)}")
     st.stop()
 
-
-# # Build query
-# where_clause = ""
-# if filters:
-#     conditions = []
-#     for col, op, val in filters:
-#         if op == "contains":
-#             conditions.append(f"CAST(\"{col}\" AS VARCHAR) ILIKE '%{val}%'")
-#         elif op == "equals":
-#             conditions.append(f"CAST(\"{col}\" AS VARCHAR) = '{val}'")
-#         elif op in [">", "<", ">=", "<="]:
-#             # Try to use as number if possible, otherwise string comparison
-#             conditions.append(f"CAST(\"{col}\" AS VARCHAR) {op} '{val}'")
-#         elif op == "is null":
-#             conditions.append(f'"{col}" IS NULL')
-#         elif op == "not null":
-#             conditions.append(f'"{col}" IS NOT NULL')
-
-#     where_clause = "WHERE " + " AND ".join(conditions)
-
-# if query_mode == "Grouped (summary)":
-#     if count_col == "*":
-#         count_expr = "COUNT(*)"
-#     else:
-#         count_expr = f'COUNT("{count_col}")'
-
-#     query = f"""
-#         SELECT "{group_by_col}", {count_expr} as count
-#         FROM {DB_TABLE}
-#         {where_clause}
-#         GROUP BY "{group_by_col}"
-#         ORDER BY count DESC
-#         LIMIT {limit}
-#     """
-# else:
-#     # Raw mode query
-#     if not selected_columns:
-#         st.sidebar.error("⚠️ Please select at least one column to display")
-#         st.stop()
-
-#     cols = ", ".join([f'"{col}"' for col in selected_columns])
-
-#     # Build ORDER BY clause
-#     order_clause = ""
-#     if sort_col and sort_col != "(no sorting)":
-#         order_direction = "ASC" if sort_order == "Ascending" else "DESC"
-#         order_clause = f'ORDER BY "{sort_col}" {order_direction}'
-
-#     query = f"""
-#         SELECT {cols}
-#         FROM {DB_TABLE}
-#         {where_clause}
-#         {order_clause}
-#         LIMIT {limit}
-#     """
-
-# # Show query
-# with st.expander("📝 View SQL Query"):
-#     st.code(query, language="sql")
 
 # Run query button
 if st.sidebar.button("🔍 Run Query", type="primary"):
@@ -361,12 +307,25 @@ if st.sidebar.button("🔍 Run Query", type="primary"):
 
                 # Chart
                 st.subheader("Visualisation")
-                chart_col = df.columns[0]
-                if len(df) <= 50:
-                    st.bar_chart(df.set_index(chart_col)["count"])
+                # For multi-column grouping, create a combined label
+                if len(group_by_cols) == 1:
+                    chart_index = df.columns[0]
+                    chart_df = df.set_index(chart_index)["count"]
                 else:
-                    st.info(f"📊 Showing top 50 of {len(df)} groups in chart")
-                    st.bar_chart(df.head(50).set_index(chart_col)["count"])
+                    # Combine multiple columns into a single label
+                    df_chart = df.copy()
+                    df_chart["_combined_label"] = df_chart[group_by_cols].apply(
+                        lambda row: " | ".join(str(v) for v in row), axis=1
+                    )
+                    chart_df = df_chart.set_index("_combined_label")["count"]
+
+                if len(df) <= 50:
+                    st.bar_chart(chart_df)
+                else:
+                    st.info(
+                        f"📊 Showing top 50 of {len(df)} groups in chart (sorted by count, descending)"
+                    )
+                    st.bar_chart(chart_df.head(50))
             else:
                 # Raw mode display
                 st.subheader(f"Results")
