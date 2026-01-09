@@ -1,4 +1,4 @@
-from src.constants import CACHE_TTL, DB_TABLE
+from src.constants import CACHE_TTL, DB_NAME, SCHEMA_NAME, TABLES, DEFAULT_TABLE
 from src.query import build_query
 import streamlit as st
 import duckdb
@@ -17,9 +17,9 @@ DEFAULT_RAW_COLUMNS = [
     "TLA",
 ]
 
-st.set_page_config(page_title="NZ Vehicle Register Query", layout="wide")
+st.set_page_config(page_title="NZ Motor Vehicle Register Explorer", layout="wide")
 
-st.title("🚗 NZ Motor Vehicle Register Query Tool")
+st.title("🚗 NZ Motor Vehicle Register Explorer")
 
 
 def get_motherduck_token() -> str:
@@ -64,10 +64,10 @@ st.success("✅ Connected to MotherDuck cloud database")
 
 # Get column names
 @st.cache_data(ttl=CACHE_TTL)
-def get_columns() -> List[str]:
+def get_columns(table_name: str) -> List[str]:
     """Fetch and cache column names from table"""
     try:
-        result = con.execute(f"DESCRIBE {DB_TABLE}").fetchall()
+        result = con.execute(f"DESCRIBE {table_name}").fetchall()
         return [row[0] for row in result]
     except duckdb.Error as e:
         st.error(f"DuckDB error: {str(e)}")
@@ -78,9 +78,9 @@ def get_columns() -> List[str]:
 
 
 @st.cache_data(ttl=CACHE_TTL)
-def get_row_count() -> Optional[int]:
+def get_row_count(table_name: str) -> Optional[int]:
     try:
-        result = con.execute(f"SELECT COUNT(*) FROM {DB_TABLE}").fetchone()
+        result = con.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()
         return result[0]
     except Exception as e:
         st.warning(f"Could not retrieve row count: {str(e)}")
@@ -104,24 +104,35 @@ def run_query(query: str, params: List) -> pd.DataFrame:
         raise RuntimeError(f"Query execution failed: {str(e)}")
 
 
+# Sidebar for query building
+st.sidebar.header("Query builder")
+
+st.sidebar.header("Data set")
+selected_table = st.sidebar.selectbox(
+    "Table:",
+    TABLES,
+    index=TABLES.index(DEFAULT_TABLE) if DEFAULT_TABLE in TABLES else 0,
+    help="Choose which table to query",
+)
+
+# Construct full table name
+table_name = ".".join([DB_NAME, SCHEMA_NAME, selected_table])
+
 # Load dataset info
 with st.spinner("📋 Loading table schema..."):
-    available_columns = get_columns()
+    available_columns = get_columns(table_name)
 
 if not available_columns:
     st.error("❌ Could not read table from MotherDuck.")
-    st.info(f"Have you uploaded your data and named it {DB_TABLE}?")
+    st.info(f"Have you uploaded your data and named it {table_name}?")
     st.stop()
 
 # Get row count
-total_rows = get_row_count()
+total_rows = get_row_count(table_name)
 if total_rows:
     st.sidebar.success(f"✅ Total vehicles: {total_rows:,}")
 
 st.info("💡 Queries should take 1-5 seconds")
-
-# Sidebar for query building
-st.sidebar.header("Query builder")
 
 # Query mode selection
 query_mode = st.sidebar.radio(
@@ -264,6 +275,7 @@ else:
 # Build and display query
 try:
     query, params = build_query(
+        table_name=table_name,  # Pass the full table name to build_query
         query_mode=query_mode,
         group_by_cols=group_by_cols,
         count_col=count_col,

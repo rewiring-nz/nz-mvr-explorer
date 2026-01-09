@@ -2,5 +2,7 @@
 MAX_GROUPED_RESULTS = 10000
 MAX_RAW_RESULTS = 5000
 CACHE_TTL = 3600
-# TODO: in future, let the user select which one if there are multiple versions uploaded
-DB_TABLE = "mvr.main.mvr_sep2025"
+DB_NAME = "mvr"
+SCHEMA_NAME = "main"
+TABLES = ["mvr_sep2025", "mvr_nov2025"]
+DEFAULT_TABLE = "mvr_nov2025"

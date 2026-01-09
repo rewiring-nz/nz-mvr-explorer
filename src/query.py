@@ -1,10 +1,10 @@
 from typing import List, Tuple, Optional
-from src.constants import DB_TABLE
 from src.filter import build_filter_condition
 from src.validation import validate_columns
 
 
 def build_query(
+    table_name: str,
     query_mode: str,
     group_by_cols: Optional[List[str]],
     count_col: Optional[str],
@@ -59,7 +59,7 @@ def build_query(
                 SELECT 
                     {select_clause},
                     COUNT(*) as count 
-                FROM {DB_TABLE}
+                FROM {table_name}
                 {where_clause}
                 GROUP BY {group_by_clause}
             )
@@ -82,7 +82,7 @@ def build_query(
 
         query = f"""
             SELECT {cols}
-            FROM {DB_TABLE}
+            FROM {table_name}
             {where_clause}
             {order_clause}
             LIMIT {limit}
