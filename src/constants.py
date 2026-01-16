@@ -4,5 +4,5 @@ MAX_RAW_RESULTS = 5000
 CACHE_TTL = 3600
 DB_NAME = "mvr"
 SCHEMA_NAME = "main"
-TABLES = ["mvr_sep2025", "mvr_nov2025"]
+TABLES = ["sep2025", "nov2025", "nov2025_labelled"]
 DEFAULT_TABLE = "mvr_nov2025"
