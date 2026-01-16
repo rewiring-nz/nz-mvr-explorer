@@ -17,7 +17,7 @@ Make sure you have Python installed on your computer first.
    pip install -r requirements.txt
    ```
 
-2. Get the secret token from MotherDuck (ask Jenny for access or look in our shared passwords manager) and add it to `.streamlit/secrets.toml`
+2. Copy the file `.streamlit/secrets.toml.template` and rename the duplicate to `.streamlit/secrets.toml`. Get the access token from the [MotherDuck](https://app.motherduck.com/) dev@rewiring.nz account (look in our shared passwords manager for credentials).  Go to Settings > Integrations > Access Tokens, click `Create token`, and add a descriptive name for who is using this to access the database, e.g. `Jenny's laptop`. `Create token` and copy the token. Paste it into `.streamlit/secrets.toml`
  
 3. Run the app
 
