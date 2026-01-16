@@ -114,6 +114,10 @@ selected_table = st.sidebar.selectbox(
     index=TABLES.index(DEFAULT_TABLE) if DEFAULT_TABLE in TABLES else 0,
     help="Choose which table to query",
 )
+if "labelled" in selected_table:
+    st.sidebar.text(
+        "Note that labelled datasets have been filtered from the original MVR to only include household vehicles with a non-null TLA value."
+    )
 
 # Construct full table name
 table_name = ".".join([DB_NAME, SCHEMA_NAME, selected_table])

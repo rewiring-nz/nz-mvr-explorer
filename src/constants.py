@@ -5,4 +5,4 @@ CACHE_TTL = 3600
 DB_NAME = "mvr"
 SCHEMA_NAME = "main"
 TABLES = ["sep2025", "nov2025", "nov2025_labelled"]
-DEFAULT_TABLE = "nov2025_labelled"
+DEFAULT_TABLE = "nov2025"
